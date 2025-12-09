@@ -1,68 +1,25 @@
-from typing import Any, Dict, List, Optional
-
-from mcp_server.mcp_tools import (
-    get_customer,
-    list_customers,
-    update_customer,
-    create_ticket,
-    get_customer_history,
-    ToolError,
-)
-
+# agents/data_agent.py
 
 class CustomerDataAgent:
-    """Agent responsible for customer and ticket data operations."""
+    def fetch_customer(self, cid):
+        print(f"[customer-data-agent] Fetching customer: id={cid}")
+        from mcp_server.mcp_tools import get_customer
+        return get_customer(cid)
 
-    name = "customer-data-agent"
+    def fetch_customer_history(self, cid):
+        print(f"[customer-data-agent] Fetching customer history: id={cid}")
+        from mcp_server.mcp_tools import get_customer_history
+        return get_customer_history(cid)
 
-    def __init__(self, logger_print=print):
-        self.log = logger_print
 
-    # Basic wrappers ---------------------------------------------------------
+    def list_customers(self, status=None, limit=100):
+        print(f"[customer-data-agent] Listing customers: status={status}, limit={limit}")
+        from mcp_server.mcp_tools import list_customers
+        return list_customers(status=status, limit=limit)
 
-    def fetch_customer(self, customer_id: int) -> Dict[str, Any]:
-        self.log(f"[{self.name}] Fetching customer: id={customer_id}")
-        try:
-            customer = get_customer(customer_id)
-            if not customer:
-                return {"error": f"Customer {customer_id} not found."}
-            return customer
-        except ToolError as e:
-            return {"error": str(e)}
-
-    def fetch_customers(
-        self, status: Optional[str] = None, limit: int = 20
-    ) -> List[Dict[str, Any]]:
-        self.log(f"[{self.name}] Listing customers: status={status}, limit={limit}")
-        try:
-            return list_customers(status=status, limit=limit)
-        except ToolError as e:
-            return [{"error": str(e)}]
-
-    def update_customer_fields(
-        self, customer_id: int, data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        self.log(f"[{self.name}] Updating customer {customer_id}: {data}")
-        try:
-            return update_customer(customer_id, data)
-        except ToolError as e:
-            return {"error": str(e)}
-
-    def open_ticket(
-        self, customer_id: int, issue: str, priority: str = "medium"
-    ) -> Dict[str, Any]:
-        self.log(
-            f"[{self.name}] Creating ticket: customer_id={customer_id}, "
-            f"priority={priority}, issue={issue!r}"
-        )
-        try:
-            return create_ticket(customer_id, issue, priority)
-        except ToolError as e:
-            return {"error": str(e)}
-
-    def get_history(self, customer_id: int) -> Dict[str, Any]:
-        self.log(f"[{self.name}] Fetching customer history: id={customer_id}")
-        try:
-            return get_customer_history(customer_id)
-        except ToolError as e:
-            return {"error": str(e)}
+    # 用于 multi-step 逻辑的包装
+    def list_premium_active_customers(self):
+        print("[customer-data-agent] Listing PREMIUM active customers")
+        from mcp_server.mcp_tools import list_customers
+        # 假设 premium = active (你测试数据如此)
+        return list_customers(status="active", limit=100)

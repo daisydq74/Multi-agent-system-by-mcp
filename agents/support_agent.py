@@ -1,135 +1,79 @@
-
-from typing import Any, Dict, Optional
-
-from .data_agent import CustomerDataAgent
+import requests
+import json
 
 
-class SupportAgent:
-    """Agent responsible for generating support responses."""
+def LLM(prompt: str, model: str = "deepseek-r1:8b") -> str:
+    import requests, json
 
-    name = "support-agent"
+    url = "http://localhost:11434/api/generate"
+    payload = {
+        "model": model,
+        "prompt": prompt,
+        "stream": False
+    }
+    response = requests.post(url, json=payload)
+    data = response.json()
+    return data.get("response", "")
 
-    def __init__(self, data_agent: CustomerDataAgent, logger_print=print):
+
+
+class SupportAgentLLM:
+    def __init__(self, data_agent):
         self.data_agent = data_agent
-        self.log = logger_print
+        self.model = "deepseek-r1:8b"
 
-    # High-level support logic -----------------------------------------------
+    # Scenario 1: Account help
+    def account_help(self, customer, query):
+        prompt = f"""
+You are a helpful customer support assistant.
 
-    def handle_account_help(self, customer_id: int, query: str) -> Dict[str, Any]:
-        """Scenario 1: General account assistance."""
-        self.log(f"[{self.name}] Handling account help: id={customer_id}, query={query!r}")
+Customer data:
+{customer}
 
-        customer = self.data_agent.fetch_customer(customer_id)
-        if "error" in customer:
-            return {"reply": customer["error"], "customer": None}
+User query:
+{query}
 
-        reply = (
-            f"Customer found: {customer['name']} (status: {customer['status']}). "
-            f"You said: '{query}'. I can help you with account status, upgrades, "
-            "or creating a support ticket."
-        )
-        return {"reply": reply, "customer": customer}
+Write a friendly, concise, and professional answer.
+"""
+        reply = LLM(prompt, self.model)
+        return reply
 
-    def handle_upgrade_request(self, customer_id: int, query: str) -> Dict[str, Any]:
-        """Scenario 2: Account upgrade request."""
-        self.log(f"[{self.name}] Handling upgrade request: id={customer_id}, query={query!r}")
+    # Scenario 2: Billing + cancellation escalation
+    def billing_escalation(self, history, query):
+        prompt = f"""
+You are a senior support agent handling a cancellation + billing conflict.
 
-        customer = self.data_agent.fetch_customer(customer_id)
-        if "error" in customer:
-            return {"reply": customer["error"]}
+Customer full history:
+{history}
 
-        reply = (
-            f"Confirmed customer {customer['name']} (ID {customer_id}). "
-            "I can create a high-priority ticket for the upgrade request."
-        )
-        ticket = self.data_agent.open_ticket(
-            customer_id, issue="Account upgrade request", priority="high"
-        )
-        return {"reply": reply, "ticket": ticket}
+User request:
+"{query}"
 
-    def handle_billing_and_cancel(
-        self, customer_id: Optional[int], query: str
-    ) -> Dict[str, Any]:
-        """
-        Scenario 2: Multi-intent request: cancellation + billing issue.
-        May require additional context from CustomerDataAgent.
-        """
-        self.log(
-            f"[{self.name}] Handling cancel + billing issue: id={customer_id}, query={query!r}"
-        )
+Provide:
+1. A short confirmation of the issue
+2. Billing investigation steps
+3. Ticket creation recommendation
+4. Refund considerations
+5. Next actions
 
-        if customer_id is None:
-            return {
-                "needs_context": True,
-                "reply": "I need your customer ID to look up billing and cancellation information.",
-            }
+Write in helpful natural language.
+"""
+        reply = LLM(prompt, self.model)
+        return reply
 
-        customer = self.data_agent.fetch_customer(customer_id)
-        if "error" in customer:
-            return {"reply": customer["error"]}
+    # Scenario 3: High priority ticket report
+    def high_priority_report(self, histories):
+        prompt = f"""
+You are analyzing multiple premium customers' high-priority tickets.
 
-        return {
-            "needs_billing_context": True,
-            "reply": (
-                f"Confirmed customer {customer['name']}. "
-                "This request involves both cancellation and billing issues. "
-                "I need billing history to provide a proper recommendation."
-            ),
-        }
+All customer histories:
+{histories}
 
-    def build_refund_response(
-        self, customer_id: int, history: Dict[str, Any], query: str
-    ) -> Dict[str, Any]:
-        """Generates coordinated refund/cancellation response using customer history."""
-        self.log(f"[{self.name}] Building refund/escalation response")
-
-        customer = history.get("customer")
-        tickets = history.get("tickets", [])
-
-        high_open = [
-            t for t in tickets if t["status"] != "resolved" and t["priority"] == "high"
-        ]
-
-        reply = (
-            f"Customer {customer['name']} (ID {customer_id}) has {len(tickets)} tickets, "
-            f"with {len(high_open)} unresolved high-priority issues. "
-            "Given your billing message, I recommend:\n"
-            "1. Creating a high-priority ticket for the billing + cancellation issue.\n"
-            "2. Reviewing charges for potential refunds.\n"
-            "3. Pausing further billing until the issue is resolved."
-        )
-
-        ticket = self.data_agent.open_ticket(
-            customer_id,
-            issue="Billing issue + cancellation request",
-            priority="high",
-        )
-        return {"reply": reply, "ticket": ticket, "history_summary": history}
-
-    def report_high_priority_tickets_for_premium(self, customers: list) -> Dict[str, Any]:
-        """Scenario 3: Generate report for premium users with high-priority tickets."""
-        self.log(f"[{self.name}] Building high-priority ticket report for premium customers")
-
-        rows = []
-        for c in customers:
-            history = self.data_agent.get_history(c["id"])
-            tickets = history.get("tickets", [])
-            high = [t for t in tickets if t["priority"] == "high"]
-            if not high:
-                continue
-            rows.append(
-                {
-                    "customer_id": c["id"],
-                    "customer_name": c["name"],
-                    "high_priority_tickets": high,
-                }
-            )
-
-        lines = ["High-Priority Ticket Report (Premium Customers):"]
-        for row in rows:
-            lines.append(
-                f"- {row['customer_name']} (ID {row['customer_id']}): "
-                f"{len(row['high_priority_tickets'])} high-priority tickets"
-            )
-
-        return {"reply": "\n".join(lines), "rows": rows}
+Write a structured report with:
+- Customer name + ID
+- Count of high-priority tickets
+- Any unresolved or critical issues
+- One-sentence recommendation per customer
+"""
+        reply = LLM(prompt, self.model)
+        return reply
