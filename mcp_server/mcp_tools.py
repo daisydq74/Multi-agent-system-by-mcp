@@ -2,7 +2,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-DB_FILENAME = "support.db"
+DB_FILENAME = "../support.db"
 
 
 class ToolError(Exception):
@@ -11,8 +11,9 @@ class ToolError(Exception):
 
 
 def _db_path() -> Path:
-    """Resolve the path to the SQLite database file."""
-    return Path(__file__).with_name(DB_FILENAME)
+    base = Path(__file__).resolve().parent
+    return base / DB_FILENAME
+
 
 
 def _connect() -> sqlite3.Connection:
